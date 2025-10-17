@@ -45,4 +45,5 @@ YOUTUBE_API_KEY = "AIzaSyB6RlfddksDOhIX95ah7PKIOkcEf81XUbc"
 streamlit run app.py
 
 🖼️ Пример интерфейса
+<img width="955" height="626" alt="image" src="https://github.com/user-attachments/assets/eb649bb4-2142-4607-b207-afbdc382b143" />
 
