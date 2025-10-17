@@ -1,4 +1,6 @@
 streamlit
-transformers
+openai
+transformers==4.44.2
 torch
 deep-translator
+google-api-python-client
