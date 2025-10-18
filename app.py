@@ -3,6 +3,7 @@ import streamlit as st
 from transformers import pipeline
 from deep_translator import GoogleTranslator
 from googleapiclient.discovery import build
+import re
 
 # --- 🔑 API ключи ---
 OPENAI_API_KEY = "sk-proj-uzlloZ4aJ0y2tCskJu9uj2d7JQX8Hf7ieDK0HiFB2pHXQgtH6krarWAh_JsxAp4CItzwUzXbOGT3BlbkFJR9bEC-2ZXXiIni0UoIsVCWPvq9ZT9oYitzinuHR5U45qu6Dcng3h0I_H5i9W2NpXvQFWN4SkEAQ"
@@ -28,14 +29,36 @@ emotion_emojis = {
     "surprise": "😲"
 }
 
+# --- 🔙 Резервные песни по эмоциям ---
+fallback_songs = {
+    "joy": ["Pharrell Williams - Happy", "Katy Perry - Roar", "Bruno Mars - Uptown Funk"],
+    "sadness": ["Adele - Someone Like You", "Lewis Capaldi - Someone You Loved", "Billie Eilish - When The Party’s Over"],
+    "anger": ["Linkin Park - Numb", "Eminem - Lose Yourself", "Rage Against The Machine - Killing In The Name"],
+    "fear": ["Imagine Dragons - Demons", "Billie Eilish - Bury A Friend", "Radiohead - Creep"],
+    "love": ["Ed Sheeran - Perfect", "John Legend - All Of Me", "Elvis Presley - Can’t Help Falling In Love"],
+    "surprise": ["Coldplay - Viva La Vida", "Queen - Bohemian Rhapsody", "BTS - Dynamite"]
+}
+
+# --- Очистка текста от смайлов ---
+def clean_text(text):
+    emoji_pattern = re.compile("["
+        u"\U0001F600-\U0001F64F"  # смайлы
+        u"\U0001F300-\U0001F5FF"  # символы
+        u"\U0001F680-\U0001F6FF"
+        u"\U0001F1E0-\U0001F1FF"
+        "]+", flags=re.UNICODE)
+    return emoji_pattern.sub(r'', text)
+
 # --- Поиск песни на YouTube ---
 def search_youtube(song_name):
     try:
         request = youtube.search().list(
-            q=song_name,
+            q=f"{song_name} official music video",
             part="snippet",
             type="video",
-            maxResults=1
+            videoCategoryId="10",  # категория Music
+            maxResults=1,
+            order="relevance"
         )
         response = request.execute()
         if response["items"]:
@@ -44,30 +67,35 @@ def search_youtube(song_name):
             title = item["snippet"]["title"]
             thumbnail = item["snippet"]["thumbnails"]["high"]["url"]
             url = f"https://www.youtube.com/watch?v={video_id}"
-            return {"title": title, "thumbnail": thumbnail, "url": url}
+            # Исключаем Shorts
+            if "shorts" not in url.lower() and "shorts" not in title.lower():
+                return {"title": title, "thumbnail": thumbnail, "url": url}
     except Exception as e:
         print("YouTube API error:", e)
     return None
 
-# --- Генерация песни с помощью OpenAI ---
-def suggest_song(emotion, text):
+# --- Генерация песен GPT ---
+def suggest_song_list(emotion, text):
     prompt = f"""
-    Найди популярную песню, подходящую под настроение.
-    Эмоция: {emotion}.
-    Описание: "{text}".
-    Ответь только в формате "Исполнитель - Название".
+    Назови 5 популярных песен, которые лучше всего подходят под эмоцию "{emotion}".
+    Ответь строго в формате списка:
+    1. Исполнитель - Название
+    2. Исполнитель - Название
+    ...
     """
     try:
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.8,
-            max_tokens=50
+            max_tokens=150
         )
-        return response.choices[0].message.content.strip()
+        content = response.choices[0].message.content.strip()
+        songs = re.findall(r"\d+\.\s*(.+)", content)
+        return songs if songs else None
     except Exception as e:
         print("OpenAI API error:", e)
-        return "Не удалось подобрать песню 😔"
+        return None
 
 # --- Интерфейс Streamlit ---
 st.set_page_config(page_title="🎶 SongMood AI", layout="centered")
@@ -81,8 +109,11 @@ if st.button("🎧 Подобрать песню"):
     if not text_input.strip():
         st.warning("⚠️ Пожалуйста, введите текст.")
     else:
+        # 🧹 Очистка от смайлов
+        cleaned_text = clean_text(text_input)
+
         # 1️⃣ Перевод текста
-        translated = GoogleTranslator(source='auto', target='en').translate(text_input)
+        translated = GoogleTranslator(source='auto', target='en').translate(cleaned_text)
         st.info(f"🔄 Перевод текста: *{translated}*")
 
         # 2️⃣ Анализ эмоций
@@ -91,23 +122,23 @@ if st.button("🎧 Подобрать песню"):
         main_emotion = sorted_preds[0]['label']
         emoji = emotion_emojis.get(main_emotion, "🙂")
 
-        # 3️⃣ Вывод эмоции (визуально)
         st.markdown(f"### {emoji} Определённая эмоция: **{main_emotion.capitalize()}**")
 
-        # 4️⃣ Берём топ-2 эмоции, если их несколько
-        strong_emotions = [p for p in sorted_preds if p['score'] > 0.2][:2]
+        # 3️⃣ Получаем список песен
+        songs = suggest_song_list(main_emotion, translated)
 
-        # 5️⃣ Подбор песен
+        if not songs:
+            st.warning("❌ Не удалось получить список песен от GPT. Используем резервный список.")
+            songs = fallback_songs.get(main_emotion, ["Imagine Dragons - Believer"])
+
+        # 4️⃣ Поиск на YouTube
         st.subheader("🎵 Рекомендованные треки:")
-        for e in strong_emotions:
-            emotion_name = e['label']
-            song = suggest_song(emotion_name, translated)
+        for song in songs:
             song_info = search_youtube(song)
-
             if song_info:
-                st.markdown(f"**{emotion_emojis.get(emotion_name, '🎶')} {emotion_name.capitalize()} — {song_info['title']}**")
+                st.markdown(f"**{emoji} {song_info['title']}**")
                 st.image(song_info['thumbnail'], width=320)
                 st.markdown(f"[▶️ Слушать на YouTube]({song_info['url']})")
                 st.markdown("---")
             else:
-                st.warning(f"Не удалось найти видео для {emotion_name}")
+                st.warning(f"Не удалось найти видео: {song}")
