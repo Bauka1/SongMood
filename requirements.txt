@@ -4,3 +4,6 @@ transformers==4.44.2
 torch
 deep-translator
 google-api-python-client
+requests==2.32.3
+pandas==2.2.3
+numpy==1.26.4
