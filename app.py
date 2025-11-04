@@ -6,8 +6,8 @@ from googleapiclient.discovery import build
 import re
 
 # --- 🔑 API ключи ---
-OPENAI_API_KEY = "sk-proj-uzlloZ4aJ0y2tCskJu9uj2d7JQX8Hf7ieDK0HiFB2pHXQgtH6krarWAh_JsxAp4CItzwUzXbOGT3BlbkFJR9bEC-2ZXXiIni0UoIsVCWPvq9ZT9oYitzinuHR5U45qu6Dcng3h0I_H5i9W2NpXvQFWN4SkEAQ"
-YOUTUBE_API_KEY = "AIzaSyB6RlfddksDOhIX95ah7PKIOkcEf81XUbc"
+OPENAI_API_KEY = ""
+YOUTUBE_API_KEY = ""
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 youtube = build('youtube', 'v3', developerKey=YOUTUBE_API_KEY)
